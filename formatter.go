@@ -1,18 +1,18 @@
-// Copyright 2019 Marco Berardelli
+// Copyright © 2019 Marco Berardelli marco.berardelli@gmail.com
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-// 
+//
 //     http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package youGO
 
 import(
 	s "strings"
@@ -39,6 +39,8 @@ type SongInfo struct {
 
 	// Error will be true if there are characters that cause any problems while parsing the title/artist.
 	Error bool
+
+	VideoID string
 }
 
 // A Formatter has the job of manipulating the title of the youtube video to extract the title and the artist of the song.
@@ -50,6 +52,8 @@ type Formatter struct{
 	// A Regexp is a compiled regular expression.
 	// The regular expression will remove all non-alphanumeric characters (including spaces, see bug) 
 	Regexp *regexp.Regexp
+
+	FilesNotDone []*SongInfo
 }
 
 // NewFormatter inizializes a Formatter with "[^a-zA-Z0-9]+" as compiled regular expression and with delimiters passed as arguments.
@@ -63,24 +67,30 @@ func NewFormatter(delimiters ...string) (*Formatter, error){
 	return &Formatter{ArtistDelimiters: delimiters, Regexp: reg}, nil
 }
 
+func (f *Formatter) FormatFolder(folderPath string) error{
+
+	return nil
+}
+
 // FormatMp3 takes a pointer to SongInfo as parameter 
-func (f *Formatter) FormatMp3(songInfo *SongInfo) {
+func (f *Formatter) FormatMp3(songInfo *SongInfo) error {
 
 	correctName := s.Replace(songInfo.Path, token, " ", -1)
-	songInfo.Path = correctName
 	err := os.Rename(songInfo.Path, correctName)
 	if err != nil {
-		fmt.Println(err)
+		f.FilesNotDone = append(f.FilesNotDone, songInfo)
+		fmt.Println("Redownloading the song")
+		return err
 	}
 
 	if songInfo.Error {
-		wg.Done()
-		return
+		//wg.Done()
+		return nil
 	}
 
 	tag, err := id3v2.Open(correctName, id3v2.Options{Parse: true})
 	if err != nil {
- 		log.Fatal("Error while opening mp3 file: ", err)
+ 		fmt.Println("Error while opening mp3 file: " + err.Error())
  	}
 	tag.SetArtist(songInfo.Artist)
 	tag.SetTitle(songInfo.Title)
@@ -89,8 +99,8 @@ func (f *Formatter) FormatMp3(songInfo *SongInfo) {
 	}
 	tag.Close()
 	
-	wg.Done()
-	//fmt.Println("Corrected: " + songInfo.Path)
+	//wg.Done()
+	return nil
 }
 
 func (f *Formatter) FormatTitle(title string) (*SongInfo, error) {
@@ -112,6 +122,5 @@ func (f *Formatter) FormatTitle(title string) (*SongInfo, error) {
 	nameSplitted := s.Split(title, " - ")
 	filename := f.Regexp.ReplaceAllString(nameSplitted[1], " ")
 	return &SongInfo{Title: s.Replace(filename, " ", token, -1), Artist: replacer.Replace(nameSplitted[0])}, nil
-	
 }
 

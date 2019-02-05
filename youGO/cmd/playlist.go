@@ -15,8 +15,7 @@
 package cmd
 
 import (
-	"fmt"
-	"github.com/marcoberardelli/youGO"
+	"errors"
 	"github.com/spf13/cobra"
 )
 
@@ -31,13 +30,16 @@ Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 
+	Args: func(cmd *cobra.Command, args []string) error {
+		if len(args) < 1 {
+		  return errors.New("Missing playlist link/ID")
+		}
+		return nil
+	  },
+
 	RunE: func(cmd *cobra.Command, args []string) error {
 		
-		downloader, err := youGO.NewDownloader()
-		if err != nil {
-			return err
-		}
-		fmt.Println("ARGS[0]: " + args[0])
+		
 		downloader.DownloadPlaylist(args[0])
 
 		return nil

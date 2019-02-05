@@ -15,13 +15,14 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 	"github.com/spf13/cobra"
-	// "github.com/marcoberardelli/youGO"
+	"fmt"
+
+	"github.com/marcoberardelli/youGO"
 )
 
-// var downloader *youGO.Downloader
+var downloader *youGO.Downloader
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -29,23 +30,22 @@ var rootCmd = &cobra.Command{
 	Short: "Download audio from youtube videos",
 	Long: `youGO is a tool for downloading audio as mp3 from youtube playlists and videos.
 	
-	It also tries to put the correct title and artist mp3 tags`,
+It also tries to put the correct title and artist mp3 tags`,
 }
 
-// func init() {
-// 	var err error
-// 	downloader, err = youGO.NewDownloader()
-// 	if err != nil {
-// 		fmt.Fprintf(os.Stderr, "could not initialize the program: %v\n", err)
-// 		os.Exit(1)
-// 	}
-// }
+func init() {
+	var err error
+	downloader, err = youGO.NewDownloader()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "could not initialize the program: %v\n", err)
+		os.Exit(1)
+	}
+}
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
 		os.Exit(1)
 	}
 }

@@ -1,21 +1,22 @@
-// Copyright 2019 Marco Berardelli
+// Copyright © 2019 Marco Berardelli marco.berardelli@gmail.com
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
 // You may obtain a copy of the License at
-// 
+//
 //     http://www.apache.org/licenses/LICENSE-2.0
-// 
+//
 // Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package youGO
 
 import(
 	"net/http"
+	"log"
 	"google.golang.org/api/googleapi/transport"
 	"google.golang.org/api/youtube/v3"
 	"github.com/BrianAllred/goydl"
@@ -62,7 +63,7 @@ func NewDownloader() (*Downloader, error) {
 		os.MkdirAll(dir, os.ModePerm)
 		os.MkdirAll(errorDir, os.ModePerm)
 	}
-	formatter, err := NewFormatter(" & ", " x ")
+	formatter, err := NewFormatter(" & ", " x ", " ft. ", " feat ")
 	if err != nil {
 		return nil, err
 	}
@@ -93,6 +94,7 @@ func(d *Downloader) DownloadPlaylist(playlistID string) {
 		}
 		if item.Status.PrivacyStatus == "public" {
 			songInfo, err := d.FormatterUtil.FormatTitle(item.Snippet.Title)
+			songInfo.VideoID = item.ContentDetails.VideoId
 			if err != nil {
 				switch err.(type) {
 				case *ErrorProblematicName:
@@ -103,8 +105,8 @@ func(d *Downloader) DownloadPlaylist(playlistID string) {
 			} else {
 				songInfo.Path = d.PathFolder + filepath.FromSlash("/"+songInfo.Title) + ".mp3"
 			}
-			fmt.Println("Downloading " + item.Snippet.Title + "   PATH: " + songInfo.Path)
-			d.download(item.ContentDetails.VideoId, songInfo)
+			fmt.Println("Downloading " + item.Snippet.Title)
+			d.download(songInfo)
 		}
 	}
 
@@ -125,6 +127,7 @@ func(d *Downloader) DownloadPlaylist(playlistID string) {
 			}
 			if item.Status.PrivacyStatus == "public" {
 				songInfo, err := d.FormatterUtil.FormatTitle(item.Snippet.Title)
+				songInfo.VideoID = item.ContentDetails.VideoId
 				if err != nil {
 					switch err.(type) {
 					case *ErrorProblematicName:
@@ -135,8 +138,12 @@ func(d *Downloader) DownloadPlaylist(playlistID string) {
 				} else {
 					songInfo.Path = d.PathFolder + filepath.FromSlash("/"+songInfo.Title) + ".mp3"
 				}
-				fmt.Println("Downloading " + item.Snippet.Title + "   PATH: " + songInfo.Path)
-				d.download(item.ContentDetails.VideoId, songInfo)
+				fmt.Println("Downloading " + item.Snippet.Title)
+				d.download(songInfo)
+				err = d.download(songInfo);
+				for err == nil {
+					err = d.download(songInfo)
+				}
 			}
 		}
 	}
@@ -154,6 +161,7 @@ func (d *Downloader) DownloadMp3(videoID string) {
 	}
 	if response.Items[0].Status.PrivacyStatus == "public" {
 		songInfo, err := d.FormatterUtil.FormatTitle(response.Items[0].Snippet.Title)
+		songInfo.VideoID = videoID
 		if err != nil {
 			switch err.(type) {
 			case *ErrorProblematicName:
@@ -164,25 +172,30 @@ func (d *Downloader) DownloadMp3(videoID string) {
 		} else {
 			songInfo.Path = d.PathFolder + filepath.FromSlash("/"+songInfo.Title) + ".mp3"
 		}
-		d.download(videoID, songInfo)
+		fmt.Println("Downloading " + response.Items[0].Snippet.Title)
+
+		err = d.download(songInfo);
+		for err == nil {
+			err = d.download(songInfo)
+		}
 	}
 }
 
 
-func (d *Downloader) download(videoID string, songInfo *SongInfo) {
+func (d *Downloader) download(songInfo *SongInfo) error {
 	y := goydl.NewYoutubeDl()
+	
 	
 	//filename := songInfo.Path + filepath.FromSlash("/"+songInfo.Title) + ".mp3"
 	y.Options.Output.Value = songInfo.Path
 	y.Options.ExtractAudio.Value = true
 	y.Options.Format.Value = "140"
 	y.Options.AudioFormat.Value = "mp3"
-	cmd, err := y.Download("https://www.youtube.com/watch?v="+videoID)
+	command, err := y.Download("https://www.youtube.com/watch?v=" + songInfo.VideoID)
 	if err != nil {
-		fmt.Println(err)
+		log.Fatal(err)
 	}
-	cmd.Wait()
-	wg.Add(1)
-	go d.FormatterUtil.FormatMp3(songInfo)
-
+	command.Wait()
+	//wg.Add(1)
+	return d.FormatterUtil.FormatMp3(songInfo)
 }
