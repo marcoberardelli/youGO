@@ -14,7 +14,9 @@
 
 package main
 
-import "github.com/marcoberardelli/youGO/youGO/cmd"
+import (
+	"github.com/marcoberardelli/youGO/youGO/cmd"
+)
 
 func main() {
 	cmd.Execute()

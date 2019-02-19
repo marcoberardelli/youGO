@@ -15,112 +15,136 @@
 package youGO
 
 import(
-	s "strings"
-	"os"
+	"os/exec"
 	"fmt"
 	"regexp"
 	"log"
-	"github.com/bogem/id3v2"
+	"path/filepath"
+	s "strings"
+	"bytes"
+	"os"
 )
 
-const token = "---"
 
-// SongInfo is used to store the title and the artist of the song and it also has the path where the mp3 should be saved.
-// If the title contains any character complicated to parse the Error var will be updated to true.
-type SongInfo struct {
+type TitleFormatter interface {
+	FormatTitle(VideoData) SongData
+}
 
+
+// VideoData represents the youtube video you want to download.
+// It contains the title of the video and its video ID.
+type VideoData struct {
 	Title string
-
-	// If there are more than an artist, each one will be separeted by a comma.
-	Artist string
-
-	// Path where the file will be saved.
-	Path string
-
-	// Error will be true if there are characters that cause any problems while parsing the title/artist.
-	Error bool
-
 	VideoID string
 }
 
-// A Formatter has the job of manipulating the title of the youtube video to extract the title and the artist of the song.
+
+// SongData contains all the information about the song downloaded.
+type SongData struct {
+	Title string
+	Artist string
+	Video VideoData
+	// CorrectedName will be true if the title of the video doesn't contain any peculiar characters.
+	CorrectedName bool
+}
+
+
+// Formatter implements TitleFormatter and is used to extract the title and artist of the song from the video title.
+// It also update the file with the title and artist metadata
 type Formatter struct{
 
-	// Slice that contains all the characters for identifying if the song has more than an artist.
+	// Slice that contains all the characters for identifying if the song has more than an artist, such as "ft." and "&".
 	ArtistDelimiters []string
 
 	// A Regexp is a compiled regular expression.
-	// The regular expression will remove all non-alphanumeric characters (including spaces, see bug) 
+	// The regular expression will remove all non-alphanumeric characters.
 	Regexp *regexp.Regexp
-
-	FilesNotDone []*SongInfo
 }
+
 
 // NewFormatter inizializes a Formatter with "[^a-zA-Z0-9]+" as compiled regular expression and with delimiters passed as arguments.
-// Then it returns the pointer to the struct
-func NewFormatter(delimiters ...string) (*Formatter, error){
+func NewFormatter(delimiters ...string) (Formatter, error){
 	reg, err := regexp.Compile("[^a-zA-Z0-9]+")
     if err != nil {
-        return nil, err
+        return Formatter{}, err
     }
-    
-	return &Formatter{ArtistDelimiters: delimiters, Regexp: reg}, nil
-}
-
-func (f *Formatter) FormatFolder(folderPath string) error{
-
-	return nil
-}
-
-// FormatMp3 takes a pointer to SongInfo as parameter 
-func (f *Formatter) FormatMp3(songInfo *SongInfo) error {
-
-	correctName := s.Replace(songInfo.Path, token, " ", -1)
-	err := os.Rename(songInfo.Path, correctName)
-	if err != nil {
-		f.FilesNotDone = append(f.FilesNotDone, songInfo)
-		fmt.Println("Redownloading the song")
-		return err
-	}
-
-	if songInfo.Error {
-		//wg.Done()
-		return nil
-	}
-
-	tag, err := id3v2.Open(correctName, id3v2.Options{Parse: true})
-	if err != nil {
- 		fmt.Println("Error while opening mp3 file: " + err.Error())
- 	}
-	tag.SetArtist(songInfo.Artist)
-	tag.SetTitle(songInfo.Title)
-	if err = tag.Save(); err != nil {
-		log.Fatal("Error while saving a tag: ", err)
-	}
-	tag.Close()
 	
-	//wg.Done()
-	return nil
+	return Formatter{ArtistDelimiters: delimiters, Regexp: reg, }, nil
 }
 
-func (f *Formatter) FormatTitle(title string) (*SongInfo, error) {
 
+func (f Formatter) FormatTitle(video VideoData) SongData {
+
+	if s.Count(video.Title, " - ") != 1 {
+		song := SongData{
+			Video: video,
+			CorrectedName: false,
+		}
+		return song
+	}
+
+
+	/*
+	// TODO:
 	r := make([]string, len(f.ArtistDelimiters)*2)
 	for _, delimiter := range f.ArtistDelimiters {
 		r = append(r, delimiter)
 		r = append(r, ", ")
 	}
 	replacer := s.NewReplacer(r...)
+	*/
 	
-	if s.Count(title, " - ") != 1 {
-		
-		noSpace := s.Replace(title, " ", token, -1)
-		songInfo := &SongInfo{Title: f.Regexp.ReplaceAllString(noSpace, token), Artist: "", Error: true}
-		return songInfo, NewErrorProblematicName("Name has difficult characters to understand, saving in Formatter.FilesNotDone")
+	
+	// TODO: 
+	titleSplitted := s.Split(video.Title, " - ")
+	song := SongData{
+		Title: titleSplitted[1],
+		Artist: titleSplitted[0],
+		Video: video,
+		CorrectedName: true,
 	}
 	
-	nameSplitted := s.Split(title, " - ")
-	filename := f.Regexp.ReplaceAllString(nameSplitted[1], " ")
-	return &SongInfo{Title: s.Replace(filename, " ", token, -1), Artist: replacer.Replace(nameSplitted[0])}, nil
+	return song
 }
 
+func sanitize(title string) string {
+	cchar := []string{"?"}
+	for _, c := range cchar {
+		title = s.Replace(title, c, "", -1)
+	}
+	return title
+}
+
+func (f Formatter) FormatFile(song SongData) {
+
+	if !song.CorrectedName {
+		return
+	}
+
+	// youtube-dl saves the file without considering special character, such as ?.
+	title := sanitize(song.Video.Title)
+
+	errorPath := filepath.Join("songs", "error")
+	matches, err := filepath.Glob(filepath.Join(errorPath, title) + ".*")
+    if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	filename := s.Replace(matches[0], errorPath, "", 1)
+	path := filepath.Join("songs", filename)
+
+	cmd := exec.Command("ffmpeg","-y", "-i", filepath.Join(errorPath, filename), "-map", "0", "-c", "copy", "-metadata", fmt.Sprintf(`title="%s"`, song.Title), "-metadata", fmt.Sprintf(`author="%s"`, song.Artist), path)
+	var outb, errb bytes.Buffer
+	cmd.Stdout = &outb
+	cmd.Stderr = &errb
+	err = cmd.Run()
+	if err != nil {
+		log.Printf(errb.String())
+	}
+	
+	err = os.Remove(filepath.Join(errorPath, filename))
+	if err != nil {
+		log.Printf("Error deleting a copy of " + filename + " in " + errorPath)
+	}
+}

@@ -17,7 +17,12 @@ package cmd
 import (
 	"errors"
 	"github.com/spf13/cobra"
+	"fmt"
+	"os"
+	"github.com/marcoberardelli/youGO"
 )
+
+var formatter youGO.Formatter
 
 // playlistCmd represents the playlist command
 var playlistCmd = &cobra.Command{
@@ -39,8 +44,12 @@ to quickly create a Cobra application.`,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
 		
-		
-		downloader.DownloadPlaylist(args[0])
+		formatter, err := youGO.NewFormatter(" & ", " x ", " ft. ", " feat ")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "could not initialize the program: %v\n", err)
+			os.Exit(1)
+		}
+		downloader.DownloadPlaylistAndFormat(args[0], formatter)
 
 		return nil
 	},
@@ -48,6 +57,8 @@ to quickly create a Cobra application.`,
 
 func init() {
 	rootCmd.AddCommand(playlistCmd)
+
+	
 
 	// Here you will define your flags and configuration settings.
 

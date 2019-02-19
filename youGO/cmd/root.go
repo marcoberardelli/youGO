@@ -40,6 +40,8 @@ func init() {
 		fmt.Fprintf(os.Stderr, "could not initialize the program: %v\n", err)
 		os.Exit(1)
 	}
+
+	
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
