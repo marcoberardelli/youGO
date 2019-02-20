@@ -31,6 +31,11 @@ type TitleFormatter interface {
 }
 
 
+type FileFormatter interface {
+	FormatFile(SongData)
+}
+
+
 // VideoData represents the youtube video you want to download.
 // It contains the title of the video and its video ID.
 type VideoData struct {
@@ -107,6 +112,7 @@ func (f Formatter) FormatTitle(video VideoData) SongData {
 	return song
 }
 
+
 func sanitize(title string) string {
 	cchar := []string{"?"}
 	for _, c := range cchar {
@@ -121,7 +127,7 @@ func (f Formatter) FormatFile(song SongData) {
 		return
 	}
 
-	// youtube-dl saves the file without considering special character, such as ?.
+	// youtube-dl saves the file without considering special character, such as "?".
 	title := sanitize(song.Video.Title)
 
 	errorPath := filepath.Join("songs", "error")

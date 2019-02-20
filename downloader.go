@@ -31,10 +31,11 @@ import(
 
 type Downloader struct{
 	YtService *youtube.Service
+	Path string
 }
 
 
-func NewDownloader() (*Downloader, error) {
+func NewDownloader(path string) (*Downloader, error) {
 
 	client := &http.Client{
 		Transport: &transport.APIKey{Key: YouTubeAPIKey},
@@ -45,39 +46,54 @@ func NewDownloader() (*Downloader, error) {
 		return nil, NewErrorServiceCreation("Impossible to create youtube service")
 	}
 
-	// TODO: convert using filepath.Join()
-	// Also
-	var dir, errorDir string
-	if runtime.GOOS == "windows" {
-		dir, _ = homedir.Dir()
-		dir = dir + "\\Desktop\\songs"
-		errorDir = dir + "\\error"
-	} else {
-		dir, _ = homedir.Dir()
-		dir = dir + "/songs"
-		errorDir = dir + "/error"
+	// Creating the folder songs, if it not exists
+	path = filepath.Join(path, "songs")
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		os.MkdirAll(path, os.ModePerm)
 	}
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		os.MkdirAll(dir, os.ModePerm)
-		os.MkdirAll(errorDir, os.ModePerm)
+	// Creating the folder error, if it not exists
+	errorPath := filepath.Join(path, "error")
+	if _, err := os.Stat(errorPath); os.IsNotExist(err) {
+		os.MkdirAll(errorPath, os.ModePerm)
 	}
-
-
-
-	// formatter, err := NewFormatter(" & ", " x ", " ft. ", " feat ")
-	// if err != nil {
-	// 	return nil, err
-	// }
 
 	downloader := &Downloader{
 		YtService: service,
+		Path: path,
 	}
 
 	return downloader, nil
 }
 
 
-func(d *Downloader) DownloadPlaylistAndFormat(playlistID string, tFormatter TitleFormatter) {
+func (d *Downloader) downloadFromPlaylist(item *youtube.PlaylistItem, tFormatter TitleFormatter, toFormat bool) {
+	// Checking if the video wasn't deleted
+	if item.Status == nil {
+		return
+	}
+
+	if item.Status.PrivacyStatus == "public" {
+		video := VideoData{
+			VideoID: item.ContentDetails.VideoId,
+			Title: item.Snippet.Title,
+		}
+		
+		log.Println("Downloading " + item.Snippet.Title)
+		d.download(video)
+
+		if toFormat {
+			song := tFormatter.FormatTitle(video)
+			// Creating a new Formatter, used to add the metadata to the file, if you wrote your own implementation of TitleFormatter.
+			formatter, ok := tFormatter.(Formatter)
+			if !ok {
+				formatter = Formatter{}
+			}
+			formatter.FormatFile(song)
+		}
+	}
+}
+
+func(d *Downloader) DownloadPlaylist(playlistID string, tFormatter TitleFormatter, toFormat bool) {
 
 	call := d.YtService.PlaylistItems.List("snippet,contentDetails,status")
 	call.MaxResults(50)
@@ -88,26 +104,11 @@ func(d *Downloader) DownloadPlaylistAndFormat(playlistID string, tFormatter Titl
 	}
 	
 	for _, item := range response.Items {
-		if item.Status == nil {
-			continue
-		}
-		if item.Status.PrivacyStatus == "public" {
-			video := VideoData{
-				VideoID: item.ContentDetails.VideoId,
-				Title: item.Snippet.Title,
-			}
-			
-			song := tFormatter.FormatTitle(video)
-			fmt.Println("Downloading " + item.Snippet.Title)
-			d.download(video)
-			formatter, ok := tFormatter.(Formatter)
-			if !ok {
-				formatter = Formatter{}
-			}
-			formatter.FormatFile(song)
-		}
+		d.downloadFromPlaylist(item, tFormatter, toFormat)
 	}
 
+	// The YouTube API returns just a limited number of videos from a playlist, organized in "pages".
+	// Looping until we reach the last page.
 	for response.NextPageToken != ""  {
 		call = d.YtService.PlaylistItems.List("snippet,contentDetails,status")
 		call.PageToken(response.NextPageToken)
@@ -119,25 +120,7 @@ func(d *Downloader) DownloadPlaylistAndFormat(playlistID string, tFormatter Titl
 		}
 		
 		for _, item := range response.Items {
-			
-			if item.Status == nil {
-				continue
-			}
-			if item.Status.PrivacyStatus == "public" {
-				video := VideoData{
-					VideoID: item.ContentDetails.VideoId,
-					Title: item.Snippet.Title,
-				}
-				
-				song := tFormatter.FormatTitle(video)
-				fmt.Println("Downloading " + item.Snippet.Title)
-				d.download(video)
-				formatter, ok := tFormatter.(Formatter)
-				if !ok {
-					formatter = Formatter{}
-				}
-				formatter.FormatFile(song)
-			}
+			d.downloadFromPlaylist(item, tFormatter, toFormat)
 		}
 	}
 }
