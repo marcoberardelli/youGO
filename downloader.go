@@ -114,7 +114,9 @@ func (d *Downloader) downloadFromPlaylist(item *youtube.PlaylistItem, tFormatter
 }
 
 
-// 
+// DownloadPlaylistAndFormat downloads all the videos in the playlist.
+// The downloaded files will be ignored if the TitleFormatter fails to parse the title,
+// otherwise their will be moved to formatted folder.
 func(d *Downloader) DownloadPlaylistAndFormat(playlistID string, tFormatter TitleFormatter) {
 
 	call := d.YtService.PlaylistItems.List("snippet,contentDetails,status")
@@ -152,7 +154,9 @@ func(d *Downloader) DownloadPlaylistAndFormat(playlistID string, tFormatter Titl
 }
 
 
-
+// DownloadVideoAndFormat downloads the given video bi its ID.
+// The downloaded file will be ignored if the TitleFormatter fails to parse the title,
+// otherwise the file will be moved to formatted folder.
 func (d *Downloader) DownloadVideoAndFormat(videoID string, tFormatter TitleFormatter) error {
 
 	call := d.YtService.Videos.List("snippet,status")

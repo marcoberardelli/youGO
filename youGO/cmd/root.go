@@ -28,9 +28,9 @@ var downloader youGO.Downloader
 var rootCmd = &cobra.Command{
 	Use:   "youGO",
 	Short: "Download audio from youtube videos",
-	Long: `youGO is a tool for downloading audio as mp3 from youtube playlists and videos.
+	Long: `youGO is a tool for downloading audio from youtube playlists and videos.
 	
-It also tries to put the correct title and artist mp3 tags`,
+It also tries to put the correct metadata tags for title and artists.`,
 }
 
 func init() {
