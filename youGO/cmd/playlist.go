@@ -49,7 +49,7 @@ to quickly create a Cobra application.`,
 			fmt.Fprintf(os.Stderr, "could not initialize the program: %v\n", err)
 			os.Exit(1)
 		}
-		downloader.DownloadPlaylist(args[0], formatter, true)
+		downloader.DownloadPlaylistAndFormat(args[0], formatter)
 
 		return nil
 	},

@@ -15,22 +15,24 @@
 package youGO
 
 import(
-	"os/exec"
-	"fmt"
-	"regexp"
-	"log"
-	"path/filepath"
-	s "strings"
 	"bytes"
+	"errors"
+	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	s "strings"
 )
 
-
+// TitleFormatter is the interface that contains the FormatTitle method.
+// FormatTitle tries to obtains the artist and title of the song by parsing the title of the video.
 type TitleFormatter interface {
 	FormatTitle(VideoData) SongData
 }
 
-
+// FileFormatter is the interface that contains the FormatFile method.
+// FormatFile edits the metadata tags of the file downloaded.
 type FileFormatter interface {
 	FormatFile(SongData)
 }
@@ -40,17 +42,21 @@ type FileFormatter interface {
 // It contains the title of the video and its video ID.
 type VideoData struct {
 	Title string
+	
 	VideoID string
 }
 
 
 // SongData contains all the information about the song downloaded.
 type SongData struct {
-	Title string
 	Artist string
-	Video VideoData
-	// CorrectedName will be true if the title of the video doesn't contain any peculiar characters.
+
+	Title string
+
+	// CorrectedName is set to true if the title of the video doesn't contain any peculiar characters.
 	CorrectedName bool
+
+	Video VideoData
 }
 
 
@@ -78,6 +84,8 @@ func NewFormatter(delimiters ...string) (Formatter, error){
 }
 
 
+// FormatTitle retreives the title and the artist by parsing the video title.
+// If the name of the video is diffucult to parse, FormatTitle returns SongData with empty Artist and Title parameters
 func (f Formatter) FormatTitle(video VideoData) SongData {
 
 	if s.Count(video.Title, " - ") != 1 {
@@ -90,7 +98,7 @@ func (f Formatter) FormatTitle(video VideoData) SongData {
 
 
 	/*
-	// TODO:
+	// TODO: upgrade the algorithm used to parse the title
 	r := make([]string, len(f.ArtistDelimiters)*2)
 	for _, delimiter := range f.ArtistDelimiters {
 		r = append(r, delimiter)
@@ -98,9 +106,9 @@ func (f Formatter) FormatTitle(video VideoData) SongData {
 	}
 	replacer := s.NewReplacer(r...)
 	*/
+	// [\p{L}-&.]
+	// \[.*\]\s?
 	
-	
-	// TODO: 
 	titleSplitted := s.Split(video.Title, " - ")
 	song := SongData{
 		Title: titleSplitted[1],
@@ -114,43 +122,57 @@ func (f Formatter) FormatTitle(video VideoData) SongData {
 
 
 func sanitize(title string) string {
-	cchar := []string{"?"}
+	// TODO: change to map and assign "" to "?" and "_" to "|"
+	cchar := []string{"?","|"}
 	for _, c := range cchar {
 		title = s.Replace(title, c, "", -1)
 	}
 	return title
 }
 
-func (f Formatter) FormatFile(song SongData) {
+
+// FormatFile edits the file downloaded by setting the artist and title metadata.
+func (f Formatter) FormatFile(song SongData, path string) error {
 
 	if !song.CorrectedName {
-		return
+		return nil
 	}
 
 	// youtube-dl saves the file without considering special character, such as "?".
-	title := sanitize(song.Video.Title)
+	//title := sanitize(song.Video.Title)
+	//fmt.Println("Title:  " + title)
 
-	errorPath := filepath.Join("songs", "error")
-	matches, err := filepath.Glob(filepath.Join(errorPath, title) + ".*")
-    if err != nil {
-		fmt.Println(err)
-		return
+	filePath := filepath.Join(path, song.Video.Title)
+	formattedPath := filepath.Join(path, "formatted")
+	
+	
+	matches, err := filepath.Glob(filePath + ".*")
+	if err != nil {
+		return err
 	}
 
-	filename := s.Replace(matches[0], errorPath, "", 1)
-	path := filepath.Join("songs", filename)
+	if len(matches) == 0 {
+		return errors.New("Impossible to open: " + song.Video.Title)
+	}
 
-	cmd := exec.Command("ffmpeg","-y", "-i", filepath.Join(errorPath, filename), "-map", "0", "-c", "copy", "-metadata", fmt.Sprintf(`title="%s"`, song.Title), "-metadata", fmt.Sprintf(`author="%s"`, song.Artist), path)
+	filename := s.Replace(matches[0], path, "", 1)
+	formattedFilepath := filepath.Join(formattedPath, filename)
+
+	// Calling ffmpeg to edit the metadata tags
+	cmd := exec.Command("ffmpeg","-y", "-i", matches[0], "-map", "0", "-c", "copy", "-metadata", fmt.Sprintf(`title="%s"`, song.Title), "-metadata", fmt.Sprintf(`artist="%s"`, song.Artist), formattedFilepath)
 	var outb, errb bytes.Buffer
 	cmd.Stdout = &outb
 	cmd.Stderr = &errb
 	err = cmd.Run()
 	if err != nil {
-		log.Printf(errb.String())
+		return errors.New(errb.String())
 	}
 	
-	err = os.Remove(filepath.Join(errorPath, filename))
+	// Removing old file
+	err = os.Remove(filepath.Join(path, filename))
 	if err != nil {
-		log.Printf("Error deleting a copy of " + filename + " in " + errorPath)
+		return err
 	}
+
+	return nil
 }

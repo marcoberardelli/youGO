@@ -15,27 +15,27 @@
 package youGO
 
 import(
-	"net/http"
-	"log"
+	"bytes"
+	"errors"
+	"fmt"
 	"google.golang.org/api/googleapi/transport"
 	"google.golang.org/api/youtube/v3"
-	"runtime"
-	"fmt"
+	"net/http"
 	"os"
-	"github.com/mitchellh/go-homedir"
-	"path/filepath"
-
 	"os/exec"
-	"bytes"
+	"path/filepath"
 )
 
+// Downloader contains the path where to store the files and a reference to the youtube service used to retreive video information.
 type Downloader struct{
-	YtService *youtube.Service
 	Path string
+	YtService *youtube.Service
 }
 
 
-func NewDownloader(path string) (*Downloader, error) {
+// NewDownloader initializes a new instance of Downloader.
+// If the folders songs and formatted don't exist they will be created.
+func NewDownloader(path string) (Downloader, error) {
 
 	client := &http.Client{
 		Transport: &transport.APIKey{Key: YouTubeAPIKey},
@@ -43,21 +43,21 @@ func NewDownloader(path string) (*Downloader, error) {
 
 	service, err := youtube.New(client)
 	if err != nil {
-		return nil, NewErrorServiceCreation("Impossible to create youtube service")
+		return Downloader{}, NewErrorServiceCreation("Impossible to create youtube service")
 	}
 
-	// Creating the folder songs, if it not exists
+	// Creating the songs folder, if it not exists
 	path = filepath.Join(path, "songs")
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		os.MkdirAll(path, os.ModePerm)
 	}
-	// Creating the folder error, if it not exists
-	errorPath := filepath.Join(path, "error")
-	if _, err := os.Stat(errorPath); os.IsNotExist(err) {
-		os.MkdirAll(errorPath, os.ModePerm)
+	// Creating the formatted folder, if it not exists
+	formattedPath := filepath.Join(path, "formatted")
+	if _, err := os.Stat(formattedPath); os.IsNotExist(err) {
+		os.MkdirAll(formattedPath, os.ModePerm)
 	}
 
-	downloader := &Downloader{
+	downloader := Downloader{
 		YtService: service,
 		Path: path,
 	}
@@ -66,34 +66,56 @@ func NewDownloader(path string) (*Downloader, error) {
 }
 
 
-func (d *Downloader) downloadFromPlaylist(item *youtube.PlaylistItem, tFormatter TitleFormatter, toFormat bool) {
-	// Checking if the video wasn't deleted
-	if item.Status == nil {
-		return
+func (d *Downloader) download(video VideoData, path string) error {
+	path = filepath.Join(path, "%(title)s.%(ext)s")
+	cmd := exec.Command("youtube-dl", "-x", "-f", "bestaudio", "-o", path, "https://www.youtube.com/watch?v="+video.VideoID)
+	var outb, errb bytes.Buffer
+	cmd.Stdout = &outb
+	cmd.Stderr = &errb
+	err := cmd.Run()
+	if err != nil {
+		return errors.New(errb.String())
 	}
-
-	if item.Status.PrivacyStatus == "public" {
-		video := VideoData{
-			VideoID: item.ContentDetails.VideoId,
-			Title: item.Snippet.Title,
-		}
-		
-		log.Println("Downloading " + item.Snippet.Title)
-		d.download(video)
-
-		if toFormat {
-			song := tFormatter.FormatTitle(video)
-			// Creating a new Formatter, used to add the metadata to the file, if you wrote your own implementation of TitleFormatter.
-			formatter, ok := tFormatter.(Formatter)
-			if !ok {
-				formatter = Formatter{}
-			}
-			formatter.FormatFile(song)
-		}
-	}
+	return nil
 }
 
-func(d *Downloader) DownloadPlaylist(playlistID string, tFormatter TitleFormatter, toFormat bool) {
+
+func (d *Downloader) downloadFromPlaylist(item *youtube.PlaylistItem, tFormatter TitleFormatter, toFormat bool) error {
+
+	// Checking if the video wasn't deleted
+	if item.Status == nil {
+		return errors.New("Unable to get the video")
+	}
+	if item.Status.PrivacyStatus == "private" {
+		return errors.New("Private video")
+	}
+
+	video := VideoData{
+		VideoID: item.ContentDetails.VideoId,
+		Title: sanitize(item.Snippet.Title),
+	}
+	
+	fmt.Println("Downloading " + video.Title)
+	d.download(video, d.Path)
+
+	if toFormat {
+		song := tFormatter.FormatTitle(video)
+		// Creating a new Formatter, used to add the metadata to the file, if you wrote your own implementation of TitleFormatter.
+		formatter, ok := tFormatter.(Formatter)
+		if !ok {
+			formatter = Formatter{}
+		}
+		err := formatter.FormatFile(song, d.Path)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+
+// 
+func(d *Downloader) DownloadPlaylistAndFormat(playlistID string, tFormatter TitleFormatter) {
 
 	call := d.YtService.PlaylistItems.List("snippet,contentDetails,status")
 	call.MaxResults(50)
@@ -104,7 +126,7 @@ func(d *Downloader) DownloadPlaylist(playlistID string, tFormatter TitleFormatte
 	}
 	
 	for _, item := range response.Items {
-		d.downloadFromPlaylist(item, tFormatter, toFormat)
+		d.downloadFromPlaylist(item, tFormatter, true)
 	}
 
 	// The YouTube API returns just a limited number of videos from a playlist, organized in "pages".
@@ -117,41 +139,51 @@ func(d *Downloader) DownloadPlaylist(playlistID string, tFormatter TitleFormatte
 		response, err = call.Do()
 		if err != nil {
 			fmt.Println(err)
+			continue
 		}
 		
 		for _, item := range response.Items {
-			d.downloadFromPlaylist(item, tFormatter, toFormat)
+			err := d.downloadFromPlaylist(item, tFormatter, true)
+			if err != nil {
+				fmt.Println(err)
+			}
 		}
 	}
 }
 
-func (d *Downloader) download (video VideoData) {
-	path := filepath.Join("songs", "error", "%(title)s.%(ext)s")
-	cmd := exec.Command("youtube-dl", "-x", "-f", "bestaudio", "-o", path, "https://www.youtube.com/watch?v="+video.VideoID)
-	var outb, errb bytes.Buffer
-	cmd.Stdout = &outb
-	cmd.Stderr = &errb
-	err := cmd.Run()
-	if err != nil {
-		log.Printf(errb.String())
-	}
-}
 
-func (d *Downloader) DownloadMp3(videoID string) {
 
-	/*
+func (d *Downloader) DownloadVideoAndFormat(videoID string, tFormatter TitleFormatter) error {
+
 	call := d.YtService.Videos.List("snippet,status")
 	call = call.Id(videoID)
 	response, err := call.Do()
 	if err != nil {
-		fmt.Println(err)
+		return err
 	}
-	if response.Items[0].Status.PrivacyStatus == "public" {
-		songInfo := &SongInfo{
-			VideoID: response.Items[0].Id,
-			Title:  response.Items[0].Snippet.Title,
-		}
-		fmt.Println("Downloading " + response.Items[0].Snippet.Title)
+	if response.Items[0] == nil {
+		return errors.New("Unable to get the video")
 	}
-	*/
+	if response.Items[0].Status.PrivacyStatus == "private" {
+		return errors.New("Private video")
+	}
+
+
+	video := VideoData{
+		VideoID: response.Items[0].Id,
+		Title: response.Items[0].Snippet.Title,
+	}
+	
+	fmt.Println("Downloading " + video.Title)
+	d.download(video, d.Path)
+
+	song := tFormatter.FormatTitle(video)
+	// Creating a new Formatter, used to add the metadata to the file, if you wrote your own implementation of TitleFormatter.
+	formatter, ok := tFormatter.(Formatter)
+	if !ok {
+		formatter = Formatter{}
+	}
+	formatter.FormatFile(song, d.Path)
+
+	return nil
 }

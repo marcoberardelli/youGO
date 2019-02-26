@@ -22,7 +22,7 @@ import (
 	"github.com/marcoberardelli/youGO"
 )
 
-var downloader *youGO.Downloader
+var downloader youGO.Downloader
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -35,7 +35,7 @@ It also tries to put the correct title and artist mp3 tags`,
 
 func init() {
 	var err error
-	downloader, err = youGO.NewDownloader()
+	downloader, err = youGO.NewDownloader("/home/marco/Desktop")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "could not initialize the program: %v\n", err)
 		os.Exit(1)
