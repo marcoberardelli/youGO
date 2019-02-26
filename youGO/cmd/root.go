@@ -15,16 +15,17 @@
 package cmd
 
 import (
-	"os"
-	"github.com/spf13/cobra"
 	"fmt"
-
 	"github.com/marcoberardelli/youGO"
+	"github.com/spf13/cobra"
+	"os"
 )
 
 var downloader youGO.Downloader
+var formatter youGO.Formatter
+var path string
 
-// rootCmd represents the base command when called without any subcommands
+
 var rootCmd = &cobra.Command{
 	Use:   "youGO",
 	Short: "Download audio from youtube videos",
@@ -35,13 +36,12 @@ It also tries to put the correct metadata tags for title and artists.`,
 
 func init() {
 	var err error
-	downloader, err = youGO.NewDownloader("/home/marco/Desktop")
+	defaultPath, err := os.Getwd()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "could not initialize the program: %v\n", err)
+		fmt.Println(err)
 		os.Exit(1)
 	}
-
-	
+	rootCmd.PersistentFlags().StringVarP(&path, "path", "p", defaultPath, "Path of the download folder")	
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

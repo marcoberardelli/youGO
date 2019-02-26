@@ -16,24 +16,19 @@ package cmd
 
 import (
 	"errors"
-	"github.com/spf13/cobra"
 	"fmt"
-	"os"
 	"github.com/marcoberardelli/youGO"
+	"github.com/spf13/cobra"
+	"os"
 )
 
-var formatter youGO.Formatter
 
-// playlistCmd represents the playlist command
 var playlistCmd = &cobra.Command{
 	Use:   "playlist",
 	Short: "Download YouTube playlist",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Long: `Download an entire playlist by passing its ID.
+	
+	All the downloaded files are saved in the songs folder.`,
 
 	Args: func(cmd *cobra.Command, args []string) error {
 		if len(args) < 1 {
@@ -43,12 +38,18 @@ to quickly create a Cobra application.`,
 	  },
 
 	RunE: func(cmd *cobra.Command, args []string) error {
-		
 		formatter, err := youGO.NewFormatter(" & ", " x ", " ft. ", " feat ")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "could not initialize the program: %v\n", err)
 			os.Exit(1)
 		}
+
+		downloader, err = youGO.NewDownloader(path)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "could not initialize the program: %v\n", err)
+			os.Exit(1)
+		}
+
 		downloader.DownloadPlaylistAndFormat(args[0], formatter)
 
 		return nil
@@ -57,16 +58,4 @@ to quickly create a Cobra application.`,
 
 func init() {
 	rootCmd.AddCommand(playlistCmd)
-
-	
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// playlistCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// playlistCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
