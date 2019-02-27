@@ -15,36 +15,47 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
-
+	"github.com/marcoberardelli/youGO"
 	"github.com/spf13/cobra"
+	"os"
 )
 
 // videoCmd represents the video command
 var videoCmd = &cobra.Command{
 	Use:   "video",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
+	Short: "Download audio from a YouTube video",
+	Long: `Download a YouTube video by passing its ID
+The downloaded file is saved in the songs folder.`,
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("video called")
+	Args: func(cmd *cobra.Command, args []string) error {
+		if len(args) < 1 {
+		return errors.New("Missing video link/ID")
+		}
+		return nil
 	},
+
+	RunE: func(cmd *cobra.Command, args []string) error {
+		formatter, err := youGO.NewFormatter(" & ", " x ", " ft. ", " feat ")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "could not initialize the program: %v\n", err)
+			os.Exit(1)
+		}
+
+		downloader, err = youGO.NewDownloader(path)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "could not initialize the program: %v\n", err)
+			os.Exit(1)
+		}
+
+		downloader.DownloadVideoAndFormat(args[0], formatter)
+
+		return nil
+	},
+	
 }
 
 func init() {
 	rootCmd.AddCommand(videoCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// videoCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// videoCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

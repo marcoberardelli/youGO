@@ -25,10 +25,9 @@ import (
 
 var playlistCmd = &cobra.Command{
 	Use:   "playlist",
-	Short: "Download YouTube playlist",
+	Short: "Download audio from a YouTube playlist",
 	Long: `Download an entire playlist by passing its ID.
-	
-	All the downloaded files are saved in the songs folder.`,
+All the downloaded files are saved in the songs folder.`,
 
 	Args: func(cmd *cobra.Command, args []string) error {
 		if len(args) < 1 {
